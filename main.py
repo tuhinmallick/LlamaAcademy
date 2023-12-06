@@ -43,7 +43,7 @@ def main():
     api_docs = cfg.API_DOCS
     logger.info(
         "Indexing and embedding docs from {api}...".format(api=api_docs))
-    
+
     if cfg.GENERATE:
         documents, documents_for_summary = ingest_docs(api_docs, recursive_depth=cfg.DEPTH_CRAWLING, logger=logger)
         embeddings = OpenAIEmbeddings()
@@ -82,7 +82,7 @@ def main():
          padding_side="right",
          use_fast=False
     )
-    
+
     if tokenizer.pad_token is None:
         smart_tokenizer_and_embedding_resize(
             special_tokens_dict=dict(pad_token=DEFAULT_PAD_TOKEN),
@@ -94,9 +94,11 @@ def main():
         "bos_token": DEFAULT_BOS_TOKEN,
         "unk_token": DEFAULT_UNK_TOKEN,
     })
-    
+
     logger.info("Loaded model and tokenizer")
-    train_dataset, eval_dataset, data_collator = make_supervised_data_module(tokenizer=tokenizer, data_path=cfg.DATA_PATH + "data.json")
+    train_dataset, eval_dataset, data_collator = make_supervised_data_module(
+        tokenizer=tokenizer, data_path=f"{cfg.DATA_PATH}data.json"
+    )
     logger.info("Loaded dataset")
 
     model = prepare_model_for_int8_training(model)

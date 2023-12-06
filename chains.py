@@ -92,7 +92,7 @@ def get_next_task(task_creation_chain: LLMChain, result: Dict, task_description:
 def prioritize_tasks(task_prioritization_chain: LLMChain, this_task_id: int, task_list: List[Dict], objective: str) -> List[Dict]:
     """Prioritize tasks."""
     task_names = [t["task_name"] for t in task_list]
-    next_task_id = int(this_task_id) + 1
+    next_task_id = this_task_id + 1
     response = task_prioritization_chain.run(task_names=task_names, next_task_id=next_task_id, objective=objective)
     new_tasks = response.split('\n')
     prioritized_task_list = []

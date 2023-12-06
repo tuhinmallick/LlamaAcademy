@@ -100,19 +100,13 @@ class Conversation:
         if self.sep_style == SeparatorStyle.SINGLE:
             ret = self.system + self.sep
             for role, message in self.messages:
-                if message:
-                    ret += role + ": " + message + self.sep
-                else:
-                    ret += role + ":"
+                ret += f"{role}: {message}{self.sep}" if message else f"{role}:"
             return ret
         elif self.sep_style == SeparatorStyle.TWO:
             seps = [self.sep, self.sep2]
             ret = self.system + seps[0]
             for i, (role, message) in enumerate(self.messages):
-                if message:
-                    ret += role + ": " + message + seps[i % 2]
-                else:
-                    ret += role + ":"
+                ret += f"{role}: {message}{seps[i % 2]}" if message else f"{role}:"
             return ret
         else:
             raise ValueError(f"Invalid style: {self.sep_style}")
@@ -433,10 +427,8 @@ def convert_vicuna(data):
     ]
     targets = [example['output'] for example in data]
 
-    new_data = []
-    cnt = 1
-    for s, t in zip(sources, targets):
-        new_data.append({
+    return [
+        {
             'id': str(cnt),
             'conversations': [
                 {
@@ -446,11 +438,11 @@ def convert_vicuna(data):
                 {
                     'from': 'gpt',
                     'value': t,
-                }
-            ]
-        })
-        cnt += 1
-    return new_data
+                },
+            ],
+        }
+        for cnt, (s, t) in enumerate(zip(sources, targets), start=1)
+    ]
 
 @torch.inference_mode()
 def generate_stream(model, tokenizer, params, device,
@@ -471,8 +463,6 @@ def generate_stream(model, tokenizer, params, device,
         if i == 0:
             out = model(
                 torch.as_tensor([input_ids], device=device), use_cache=True)
-            logits = out.logits
-            past_key_values = out.past_key_values
         else:
             attention_mask = torch.ones(
                 1, past_key_values[0][0].shape[-2] + 1, device=device)
@@ -480,9 +470,8 @@ def generate_stream(model, tokenizer, params, device,
                         use_cache=True,
                         attention_mask=attention_mask,
                         past_key_values=past_key_values)
-            logits = out.logits
-            past_key_values = out.past_key_values
-
+        past_key_values = out.past_key_values
+        logits = out.logits
         last_token_logits = logits[0][-1]
 
         if device == "mps":
@@ -497,11 +486,7 @@ def generate_stream(model, tokenizer, params, device,
 
         output_ids.append(token)
 
-        if token == tokenizer.eos_token_id:
-            stopped = True
-        else:
-            stopped = False
-
+        stopped = token == tokenizer.eos_token_id
         if i % stream_interval == 0 or i == max_new_tokens - 1 or stopped:
             output = tokenizer.decode(output_ids, skip_special_tokens=True)
             pos = output.rfind(stop_str, l_prompt)
