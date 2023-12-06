@@ -57,11 +57,8 @@ class APIReferenceLoader(WebBaseLoader):
         """
         # Send a GET request to the URL
         html_doc = self.session.get(url)
-        
-        # Create a BeautifulSoup object from the HTML text
-        soup = BeautifulSoup(html_doc.text, "html.parser")
-        
-        return soup
+
+        return BeautifulSoup(html_doc.text, "html.parser")
 
     def load(self) -> List[Document]:
         """
@@ -94,10 +91,7 @@ class APIReferenceLoader(WebBaseLoader):
         s_words = s.split()
         t_words = t.split()
 
-        # Find common words
-        common_words = [word for word in s_words if word in t_words]
-
-        return common_words
+        return [word for word in s_words if word in t_words]
 
     def insert_missing_words(self, s, t, common_words):
         """
@@ -122,8 +116,7 @@ class APIReferenceLoader(WebBaseLoader):
             if word not in t_words:
                 t_words.insert(t_words.index(common_words[-1])+1, word)
 
-        t_new = " ".join(t_words)
-        return t_new
+        return " ".join(t_words)
 
     def init_firefox_driver(self):
         """
@@ -135,8 +128,7 @@ class APIReferenceLoader(WebBaseLoader):
         options.headless = True
         options.binary = FirefoxBinary("/usr/bin/firefox")
         service = FirefoxService(executable_path="geckodriver")
-        driver = webdriver.Firefox(service=service, options=options)
-        return driver
+        return webdriver.Firefox(service=service, options=options)
 
     def scrape_visible_elements(self, url):
         """
@@ -159,8 +151,7 @@ class APIReferenceLoader(WebBaseLoader):
                     continue
                 text = elt.text or ''
                 tail = elt.tail or ''
-                words = ' '.join((text, tail)).strip()
-                if words:
+                if words := ' '.join((text, tail)).strip():
                     texts.append(words)
             return " ".join(texts)
 
@@ -248,7 +239,7 @@ def hierarchy_links(url_docs: str, recursive_depth: int = 1, current_depth: int 
     # Create a BeautifulSoup object from the HTML content
     soup = BeautifulSoup(reqs.text, 'html.parser')
     # Initialize the list for collected document links
-    docs_link = list()
+    docs_link = []
     # Iterate over all the links in the web page
     for link in soup.find_all('a'):
         # Create an absolute URL by joining the base URL and the href attribute
@@ -261,7 +252,7 @@ def hierarchy_links(url_docs: str, recursive_depth: int = 1, current_depth: int 
                 docs_link.extend(
                     hierarchy_links(ref_link, recursive_depth, current_depth + 1)
                 )
-    
+
     # Return the list of collected document links
     return docs_link
 
@@ -281,8 +272,8 @@ def ingest_docs(url_docs: str, recursive_depth: int = 1, return_summary: bool = 
     # Get links from the web page, up to the specified recursion depth
     docs_link = set(hierarchy_links(url_docs, recursive_depth))
     # Initialize the lists for collected documents and document summaries
-    documents = list()
-    docs_for_summary = list()
+    documents = []
+    docs_for_summary = []
     logger.info(f"Crawling {docs_link} ...")
     # Iterate over the collected links
     for link in tqdm.tqdm(docs_link):
@@ -297,8 +288,8 @@ def ingest_docs(url_docs: str, recursive_depth: int = 1, return_summary: bool = 
         if return_summary:
             docs_for_summary.extend(text_splitter_sum.split_documents(raw_documents))
         documents.extend(text_splitter.split_documents(raw_documents))
-    logger.info("Number of documents: {}".format(len(documents)))
-    
+    logger.info(f"Number of documents: {len(documents)}")
+
     logger.info("Saving vectorstore into assets/vectorstore.pkl")
     vectorstore = FAISS.from_documents(documents, embeddings)
     with open("assets/vectorstore.pkl", "wb") as f:

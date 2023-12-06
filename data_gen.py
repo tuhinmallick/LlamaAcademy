@@ -25,7 +25,7 @@ def post_process_response_ins(strategy, response, **kwargs):
     """
     if response is None:
         return []
-    
+
     if strategy == "diversifying-bing":
         num_prompt_instructions = kwargs["num_prompt_instructions"]
         raw_instructions = f"{num_prompt_instructions+1}. Instruction:" + \
@@ -39,9 +39,8 @@ def post_process_response_ins(strategy, response, **kwargs):
             raw_instructions = re.split("\n", response)
     else:
         raise ValueError("Unrecognised strategy provided.")
-    
-    instructions = process_raw_instructions(raw_instructions, num_prompt_instructions)
-    return instructions
+
+    return process_raw_instructions(raw_instructions, num_prompt_instructions)
 
 def process_raw_instructions(raw_instructions, num_prompt_instructions):
     """
@@ -55,20 +54,17 @@ def process_raw_instructions(raw_instructions, num_prompt_instructions):
     for idx, inst in enumerate(raw_instructions):
         if idx == len(raw_instructions) - 1:
             continue
-        
+
         splitted_data = re.split(
             f"{idx+num_prompt_instructions+1}\.\s+(Instruction|Question|Task):", inst)
 
         if len(splitted_data) != 3:
             inst = re.sub("(\d+)\.", "", inst)
             inst = re.sub("(Instruction|Question|Task):", "", inst)
-            if is_valid_instruction(inst):
-                instructions.append({"instruction": inst})
         else:
             inst = splitted_data[2].strip()
-            if is_valid_instruction(inst):
-                instructions.append({"instruction": inst})
-
+        if is_valid_instruction(inst):
+            instructions.append({"instruction": inst})
     return instructions
 
 def is_valid_instruction(instruction):
@@ -80,14 +76,11 @@ def is_valid_instruction(instruction):
     """
     if len(instruction.split()) <= 3 or len(instruction.split()) > 40:
         return False
-    
+
     if instruction[0] in string.punctuation:
         return False
 
-    if not instruction[0].isascii():
-        return False
-    
-    return True
+    return bool(instruction[0].isascii())
 
 
 def post_process_response_code(response, model_name):
@@ -179,7 +172,7 @@ def process_individual_lines(code_lines, part, should_add_comment=False, languag
             elif language is not None:
                 code_lines.append(f"#{language}")
             elif stripped_line != "":
-                code_lines.append("#" + stripped_line)
+                code_lines.append(f"#{stripped_line}")
         else:
             code_lines.append(stripped_line)
 
@@ -300,10 +293,10 @@ def launch_instruction_generation(
     request_idx = 0
     machine_instructions = []
     request_start = time.time()
-    
+
     if strategy == "reading-gpt-4":
         raise NotImplementedError("This method read the whole website to generate instructions, but not yet implemented")
-    
+
     if strategy == "summarizing-gpt-3.5-turbo-generating-gpt-4":
         """This method is a combination of summarizing and generating instructions"""
         logger.info("""You are using Summarizing mode with GPT-3.5 Turbo and Generating mode with GPT-4""")
@@ -316,7 +309,7 @@ def launch_instruction_generation(
         seed_instruction_data = [
             {"instruction": t["instruction"], "url": t["url"]} for t in seed_instructions 
         ]
-        
+
         #Get summary using gpt-3.5-turbo
         summaries = []
         embed_docs = []
@@ -328,18 +321,19 @@ def launch_instruction_generation(
                 max_tokens=700)["choices"][0]["message"]["content"]
             summaries.append(summary)
             embed_docs.append(Document(page_content=summary))  
-        
+
         #Embed summary documents into Faiss for later use
         embeddings = OpenAIEmbeddings()
         vectorstore = FAISS.from_documents(embed_docs, embeddings)
-        
+
         logger.info("Summary Vectorstore is storing in assets/vectorstore_summary.pkl")
         with open("assets/vectorstore_summary.pkl", "wb") as f:
             pickle.dump(vectorstore, f)
-            
+
         logger.info("Summarizing mode ends")
-        
+
         logger.info("Instruction Generation begins")
+        max_retries = 10
         while len(machine_instructions) < num_instructions_to_generate:
             request_idx += 1
             #TODO: ugly hack, hard code number of passages to be prompted 14
@@ -347,14 +341,13 @@ def launch_instruction_generation(
                 selected_summaries = summaries
             else:
                 selected_summaries = random.sample(summaries, 4)
-            
+
             prompt_instructions_gen = random.sample(
                 seed_instruction_data, kwargs["num_prompt_instructions"])
             kwargs_instruct = {"summaries": selected_summaries, "prompt_instructions": prompt_instructions_gen}
             prompt = encode_prompt_instruct(
                 url_docs, strategy, batch_size, **kwargs_instruct)
-            
-            max_retries = 10
+
             retries = 0
             while True:
                 try:
@@ -372,7 +365,7 @@ def launch_instruction_generation(
                         raise e
                     else:
                         logger.info(f"Attempt {retries} failed with exception: {e}. Retrying...")
-                
+
             response = results["choices"][0]["message"]["content"]
             instruction_data = post_process_response_ins(strategy, response, **kwargs)
             for instruction_data_entry in instruction_data:
@@ -382,7 +375,7 @@ def launch_instruction_generation(
                 # seed_instruction_data.append(instruction)
             request_duration = time.time() - request_start
             logger.info(f"Request {request_idx} took {request_duration:.2f}s")
-    
+
     if strategy == "diversifying-bing":
         seed_instructions = [json.loads(l)
                          for l in open(seed_instructions_path, "r")]
@@ -391,7 +384,7 @@ def launch_instruction_generation(
         ]
         logger.info("""You are using Diversifying mode with Bingchat, in this mode,
                     the general instructions are got from Bing engine requiring you to have access to Bingchat""")
-        
+
         num_prompt_instructions = kwargs["num_prompt_instructions"]
         assert len(seed_instructions) >= num_prompt_instructions, f"""The number of instructions {len(seed_instructions)} 
             is less than number of instruction into the prompt which is {num_prompt_instructions}, adding more seed instructions 
@@ -423,7 +416,7 @@ def launch_instruction_generation(
                 instruction = {
                     "instruction": instruction_data_entry["instruction"], "url": url_docs}
                 machine_instructions.append(instruction)
-            
+
             request_duration = time.time() - request_start
             logger.info(f"Request {request_idx} took {request_duration:.2f}s")
 
